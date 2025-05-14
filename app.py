@@ -6,6 +6,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from kaggle.api.kaggle_api_extended import KaggleApi
+import plotly.graph_objects as go
 
 
 st.set_page_config(page_title="Promotion Analysis Dashboard", layout="wide")
@@ -14,8 +15,8 @@ st.title("📊 Promotion Analysis Dashboard")
 
 
 # ---- CONFIGURATION ----
-DATASET_SLUG = "ujwalsintre/dataset-filtered"  # Replace with your actual Kaggle dataset
-CSV_FILENAME = "filtered_data1.csv"                      # Replace if your file name is different
+DATASET_SLUG = "ujwalsintre/dataset-filtered"            # Replace with your Kaggle dataset
+CSV_FILENAME = "filtered_data1.csv"                      # Replace if your file name is different , in the data folder.
 LOCAL_DIR = "data"
 CSV_PATH = os.path.join(LOCAL_DIR, CSV_FILENAME)
  
@@ -132,7 +133,7 @@ mid_date = df["day"].min() + (df["day"].max() - df["day"].min()) / 2
 st.sidebar.title("Content Views")
 view = st.sidebar.radio(
     "Select view",
-    ["SKU Analysis", "Group Analysis", "Compliment Analysis"]
+    ["SKU Analysis", "Group Analysis", "Compliment Analysis","Traffic Analysis","Promotion Effect Analysis"]
 ) 
 
 # ---- VIEW 1: SKU ANALYSIS ----
@@ -206,7 +207,7 @@ elif view == "Group Analysis":
 
 
 
-# - View # 
+# - View 3 # 
 
 
 elif view == "Compliment Analysis":
@@ -274,6 +275,202 @@ elif view == "Compliment Analysis":
             st.subheader("Compliment Rate Table")
             st.dataframe(compliment_counts, use_container_width=True)
 
+# ---- VIEW 4: TRAFFIC ANALYSIS ----
+elif view == "Traffic Analysis":
+    st.header("🚦 Traffic Analysis - Top 5 Shops by Unique Clients")
+
+    # Load full dataset
+    df_full = pd.read_csv(CSV_PATH, low_memory=False, parse_dates=["day"])
+
+    # ------------------ Donut Charts for Region Analysis ------------------
+    start_date = '2019-09-01'
+    end_date = '2020-10-01'
+    df_filtered = df_full[(df_full['day'] >= start_date) & (df_full['day'] <= end_date)].copy()
+
+    shop_client_counts = df_filtered.groupby(['region_name', 'shop_id'])['client_id'].nunique().reset_index()
+    shop_client_counts.rename(columns={'client_id': 'unique_client_count'}, inplace=True)
+
+    top_shops_per_region = (
+        shop_client_counts
+        .sort_values(['region_name', 'unique_client_count'], ascending=[True, False])
+        .groupby('region_name')
+        .head(5)
+        .reset_index(drop=True)
+    )
+
+    north_region_id = '152f1b77a32508570e2745daf9ce7aec'
+    south_region_id = '7e35e74e610188414ad24235dd787c78'
+
+    north_shops = top_shops_per_region[top_shops_per_region['region_name'] == north_region_id]
+    south_shops = top_shops_per_region[top_shops_per_region['region_name'] == south_region_id]
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        fig_north = px.pie(
+            north_shops,
+            values="unique_client_count",
+            names="shop_id",
+            hole=0.5,
+            color_discrete_sequence=px.colors.qualitative.Set3
+        )
+        fig_north.update_traces(
+            textinfo='percent',
+            hovertemplate='<b>Shop ID:</b> %{label}<br><b>Client Share:</b> %{percent}<extra></extra>',
+            pull=[0.02] * len(north_shops)
+        )
+        fig_north.update_layout(
+            title="Top 5 Shops - North Region",
+            title_x=0.5,
+            showlegend=True
+        )
+        st.plotly_chart(fig_north, use_container_width=True)
+
+    with col2:
+        fig_south = px.pie(
+            south_shops,
+            values="unique_client_count",
+            names="shop_id",
+            hole=0.5,
+            color_discrete_sequence=px.colors.qualitative.Set2
+        )
+        fig_south.update_traces(
+            textinfo='percent',
+            hovertemplate='<b>Shop ID:</b> %{label}<br><b>Client Share:</b> %{percent}<extra></extra>',
+            pull=[0.02] * len(south_shops)
+        )
+        fig_south.update_layout(
+            title="Top 5 Shops - South Region",
+            title_x=0.5,
+            showlegend=True
+        )
+        st.plotly_chart(fig_south, use_container_width=True)
+
+    # ------------------ Client Behavior Over Time ------------------
+    st.markdown("### 👤 Client Behavior Over Time")
+
+    # Client ID Dropdown 
+    clients_in_range = df_full['client_id'].unique()
+    selected_client_id = st.selectbox("Select Client ID", sorted(clients_in_range))
+
+    # Shop ID Dropdown (filtered by client)
+    shops_for_client = df_full[df_full['client_id'] == selected_client_id]['shop_id'].unique()
+    selected_shop_id = st.selectbox("Select Shop ID", sorted(shops_for_client))
+
+    # Filter data
+    client_shop_data = df_full[
+    (df_full['client_id'] == selected_client_id) &
+    (df_full['shop_id'] == selected_shop_id)
+    ].copy()
+
+    # Count daily visits
+    daily_visits = client_shop_data.groupby('day').size().reset_index(name='visit_count')
+
+    # Filter only positive counts (to avoid empty days)
+    positive_visits = daily_visits[daily_visits['visit_count'] > 0]
+
+    # Plot trend-only line chart (no dots)
+    fig_behavior = go.Figure()
+    fig_behavior.add_trace(go.Scatter(
+    x=positive_visits['day'],
+    y=positive_visits['visit_count'],
+    mode='lines',
+    line=dict(color='teal', width=2),
+    name='Visits'
+    ))
+
+    fig_behavior.update_layout(
+    title=f"Client Visit Trend (All Time)<br>Client: {selected_client_id} | Shop: {selected_shop_id}",
+    xaxis_title="Date",
+    yaxis_title="Number of Visits",
+    template="plotly_white",
+    margin=dict(l=40, r=20, t=60, b=40),
+    height=400
+    )
+
+    st.plotly_chart(fig_behavior, use_container_width=True)
+
+
+elif view == "Promotion Effect Analysis":
+    st.header("📈 Promotion Effect Analysis")
+
+    import numpy as np
+
+    # Load data
+    df_full = pd.read_csv(CSV_PATH, low_memory=False, parse_dates=["day"])
+
+    # Select SKU
+    all_skus = sorted(df_full["sku"].dropna().unique())
+    selected_sku = st.selectbox("Select SKU", all_skus)
+
+    # Select date range
+    min_date = pd.to_datetime("2019-05-01")
+    max_date = pd.to_datetime("2020-09-30")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        start_date = st.date_input("Start Date", min_value=min_date, max_value=max_date, value=min_date)
+    with col2:
+        end_date = st.date_input("End Date", min_value=min_date, max_value=max_date, value=max_date)
+
+    if start_date > end_date:
+        st.warning("Start date must be before end date.")
+    else:
+        df_sku = df_full[
+            (df_full['sku'] == selected_sku) &
+            (df_full['day'] >= pd.Timestamp(start_date)) &
+            (df_full['day'] <= pd.Timestamp(end_date))
+        ][['sku', 'day', 'promo_flag', 'num_sales', 'selling_price']].copy()
+
+        if df_sku.empty:
+            st.info("No data available for the selected SKU and date range.")
         else:
-            st.info("No compliment products found for the selected SKU in this date range.")
+            daily = df_sku.groupby(["day", "promo_flag"], as_index=False).agg({
+                "num_sales": "mean",
+                "selling_price": "mean"
+            })
+
+            base_sales = daily.loc[daily["promo_flag"] == "NonPromoted", "num_sales"].mean() or 0
+            base_price = daily.loc[daily["promo_flag"] == "NonPromoted", "selling_price"].mean() or np.nan
+
+            promo_days = daily[daily["promo_flag"] == "Promoted"].copy()
+            promo_days = promo_days.sort_values("day")
+
+            promo_days["day_diff"] = promo_days["day"].diff().dt.days.fillna(1)
+            promo_days["period_id"] = (promo_days["day_diff"] != 1).cumsum()
+
+            results = []
+
+            for pid, dfp in promo_days.groupby("period_id"):
+                start_p = dfp["day"].min()
+                end_p = dfp["day"].max()
+                duration = (end_p - start_p).days + 1
+
+                mean_sales = dfp["num_sales"].mean()
+                uplift = ((mean_sales - base_sales) / base_sales * 100) if base_sales > 0 else (100.0 if mean_sales > 0 else 0)
+
+                promo_price = dfp["selling_price"].mean()
+                discount = ((base_price - promo_price) / base_price * 100) if base_price > 0 else np.nan
+
+                if uplift > 0 and not pd.isna(discount) and discount > 0:
+                    results.append({
+                        "Promotion Start": start_p.strftime("%Y-%m-%d"),
+                        "Promotion End": end_p.strftime("%Y-%m-%d"),
+                        "Promotion Duration": duration,
+                        "Discount (%)": round(discount, 2),
+                        "Uplift (%)": round(uplift, 2)
+                    })
+
+            if not results:
+                st.info("No valid promotion periods with positive discount and uplift.")
+            else:
+                result_df = pd.DataFrame(results)
+                result_df.sort_values("Promotion Start", inplace=True)
+                st.markdown("### 📊 Promotion Period Summary")
+                st.dataframe(result_df, use_container_width=True)
+                
+else:
+    st.info("No compliment products found for the selected SKU in this date range.")
+
+
 
