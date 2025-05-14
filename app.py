@@ -8,13 +8,18 @@ import plotly.express as px
 from kaggle.api.kaggle_api_extended import KaggleApi
 
 
+st.set_page_config(page_title="Sales Dashboard", layout="wide")
+st.title("📊 Sales Dashboard (Debug Mode)")
+st.write("✅ App Started")
+
+
 
 # ---- CONFIGURATION ----
-DATASET_SLUG = "ujwalsintre/data-full"  # Replace with your actual Kaggle dataset
-CSV_FILENAME = "df_full.csv"                      # Replace if your file name is different
+DATASET_SLUG = "ujwalsintre/dataset-filtered"  # Replace with your actual Kaggle dataset
+CSV_FILENAME = "filtered_data1.csv"                      # Replace if your file name is different
 LOCAL_DIR = "data"
 CSV_PATH = os.path.join(LOCAL_DIR, CSV_FILENAME)
-
+ 
 # ---- DOWNLOAD DATASET USING KAGGLE API ----
 def download_dataset():
     if not os.path.exists(LOCAL_DIR):
