@@ -120,7 +120,3 @@ You can now interactively explore:
 - Verify the path to your CSV in `app.py` matches where you unzipped the data.
 
 ---
-
-## 📄 License
-
-This project is released under the MIT License. See [LICENSE](LICENSE) for details.
